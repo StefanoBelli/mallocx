@@ -177,6 +177,7 @@ void* reallocx(void* oldblock, size_t newsize) {
         }
     } else if(adjacent_block == NULL) {
         dmessage("it seems we're at the end of the list, requesting more space to the operating system...");
+        errno = 0;
         if(sbrk(newsize) == (void*) -1) {
             dmessage("sbrk failed, errno = ENOMEM");
             errno = ENOMEM;
