@@ -1,10 +1,8 @@
-# A simple malloc implementation
+# A simple memory allocator
 mallocx
 
 Not sure if everything works correctly but it should u know... lol
-
 I've done this just for fun and I would not use this of course.
-
 To use this:
 
 ```
