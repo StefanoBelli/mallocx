@@ -38,13 +38,20 @@ typedef struct __s_block_header {
 
 static block_header* blocks_head = NULL;
 
+#define get_block_header(x_addr) ((block_header*) (x_addr - sizeof(block_header))) //take care of what ur gettin 
+#define get_block_data(x_addr) ((void*) x_addr + sizeof(block_header))
+#define mallocx_check_failure_rnull(void_ptr_name, size) \
+    void* void_ptr_name = mallocx(size); \
+    if(void_ptr_name == NULL) \
+        return NULL
+
 //request the operating system to extend reserved space
 s_always_inline block_header* __iimpl_request_more_space(size_t space) {
     dfenter();
 
     dmessage("getting more space from the operating system...");
     block_header* new_space_addr = (block_header*) sbrk(space + sizeof(block_header));
-    if(new_space_addr == NULL)
+    if(new_space_addr == (void*) -1)
         return NULL;
 
     new_space_addr->block_is_free = 0;
@@ -113,7 +120,7 @@ void* mallocx(size_t size) {
     dvalue(your_block->block_size);
 
     dfleave();
-    return your_block + sizeof(block_header);
+    return get_block_data(your_block);
 }
 
 void* callocx(size_t nmemb, size_t size) {
@@ -121,12 +128,78 @@ void* callocx(size_t nmemb, size_t size) {
 
     const size_t final_size = nmemb * size;
 
-    void* addr = mallocx(final_size);
-    if(addr == NULL)
-        return NULL;
+    mallocx_check_failure_rnull(addr, final_size);
 
     dmessage("zeroing...");
     memset(addr,0, final_size);
+
+    dfleave();
+    return addr;
+}
+
+void* reallocx(void* oldblock, size_t newsize) {
+    dfenter();
+
+    //check if old block is NULL, then behave as simple malloc call
+    if(oldblock == NULL) {
+        dmessage("oldblock is NULL, calling back to mallocx...");
+        return mallocx(newsize);
+    }
+
+    //check if the old block is free, if so, return the old block 
+    block_header* old_block_hdr = get_block_header(oldblock);
+    if(old_block_hdr->block_is_free) {
+        dmessage("trying to reallocate a freed block...");
+        return oldblock;
+    }
+
+    //check if the old block is large enough
+    if(old_block_hdr->block_size >= newsize) {
+        dmessage("this block is large enough to contain new requested size...");
+        dvalue(old_block_hdr->block_size);
+        dvalue(newsize);
+        return oldblock;
+    }
+
+    //check for adjacent free block
+    block_header* adjacent_block = old_block_hdr->next;
+    if(adjacent_block && adjacent_block->block_is_free) {
+        dmessage("got an adjacent free block...");
+        const size_t new_block_size = old_block_hdr->block_size + 
+            sizeof(block_header) + 
+            adjacent_block->block_size;
+        if(newsize < new_block_size) { //good to go, lets do something...
+            dvalue(new_block_size);
+            dmessage("the adjacent free block is large enough, merging...");
+            old_block_hdr->next = adjacent_block->next; //track next pointer
+            old_block_hdr->block_size = new_block_size; //set new size
+            return oldblock;
+        }
+    } else if(adjacent_block == NULL) {
+        dmessage("it seems we're at the end of the list, requesting more space to the operating system...");
+        if(sbrk(newsize) == (void*) -1) {
+            dmessage("sbrk failed, errno = ENOMEM");
+            errno = ENOMEM;
+            return NULL;
+        }
+
+        old_block_hdr->block_size += newsize;
+        dvalue(old_block_hdr->block_size);
+        return oldblock;
+    }
+
+    dmessage("creating new block...");
+    
+    //naah, we have to create a new block, copy userdata and free this one
+    //... such a fatigue operation lol
+    mallocx_check_failure_rnull(addr, newsize);
+
+    dmessage("copying old data...");
+    memcpy(addr, oldblock, newsize);
+
+    dmessage("freeing old block...");
+    freex(oldblock);
+    oldblock = NULL;
 
     dfleave();
     return addr;
@@ -138,7 +211,7 @@ void freex(void* block) {
     if(block == NULL)
         return;
 
-    block_header* current_block = (block_header*)block - sizeof(block_header);
+    block_header* current_block = get_block_header(block);
     dvalue(current_block->block_size);
     
     current_block->block_is_free = 1;
