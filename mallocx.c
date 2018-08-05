@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <stdint.h>
+#include <string.h>
 #include "mallocx.h"
 #include "dbg.h"
 
@@ -111,13 +112,32 @@ void* mallocx(size_t size) {
     return your_block + sizeof(block_header);
 }
 
+void* callocx(size_t nmemb, size_t size) {
+    dfenter();
+
+    const size_t final_size = nmemb * size;
+
+    void* addr = mallocx(final_size);
+    if(addr == NULL)
+        return NULL;
+
+    dmessage("zeroing...");
+    memset(addr,0, final_size);
+
+    dfleave();
+    return addr;
+}
+
 void freex(void* block) {
     dfenter();
 
     if(block == NULL)
         return;
 
-    ((block_header*)block - sizeof(block_header))->block_is_free = 1;
+    block_header* current_block = (block_header*)block - sizeof(block_header);
+    dvalue(current_block->block_size);
+    
+    current_block->block_is_free = 1;
  
     dfleave();
 }

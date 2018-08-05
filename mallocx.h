@@ -4,6 +4,7 @@
 #include <sys/types.h>
 
 void* mallocx(size_t size);
+void* callocx(size_t nmemb, size_t size);
 void freex(void* ptr);
 
 #endif //SSYNX_MALLOCX_H
