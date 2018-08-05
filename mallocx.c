@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <stdint.h>
 #include <string.h>
+#include <errno.h>
 #include "mallocx.h"
 #include "dbg.h"
 
@@ -93,8 +94,11 @@ void* mallocx(size_t size) {
     block_header* your_block = __iimpl_find_suitable_block(size);
     if(your_block == NULL) {
         dmessage("could not find a suitable block... requesting space");
-        if((your_block = __iimpl_request_more_space(size)) == NULL)
+        errno = 0;
+        if((your_block = __iimpl_request_more_space(size)) == NULL) {
+            errno = ENOMEM;
             return NULL; //sbrk failed (exhausted memory)
+        }
 
         if(blocks_head == NULL) {
             dmessage("head is NULL, this is new head");
